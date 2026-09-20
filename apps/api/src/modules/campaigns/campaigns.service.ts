@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { DB } from "../../db/db.module";
 import type { Db } from "../../db/client";
 import { campaigns } from "../../db/schema";
+import { AuditService } from "../audit/audit.service";
 
 export interface CreateCampaignDto {
   name: string;
@@ -16,7 +17,7 @@ export interface CreateCampaignDto {
 
 @Injectable()
 export class CampaignsService {
-  constructor(@Inject(DB) private db: Db) {}
+  constructor(@Inject(DB) private db: Db, private audit: AuditService) {}
 
   list(tenantId: number) {
     return this.db.select().from(campaigns).where(eq(campaigns.tenantId, tenantId));
@@ -29,6 +30,7 @@ export class CampaignsService {
       services: dto.services || [], keywords: dto.keywords || [], dailyLimit: dto.dailyLimit,
       status: "active",
     }).returning();
+    await this.audit.log(tenantId, ownerUserId, "create", "campaign", row.id, dto.name);
     return row;
   }
 

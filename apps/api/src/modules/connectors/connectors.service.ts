@@ -7,6 +7,7 @@ import { ManualImportConnector } from "./manual-import.connector";
 import { RedditConnector } from "./reddit.connector";
 import { YoutubeConnector } from "./youtube.connector";
 import type { SourceConnector } from "./connector.interface";
+import { AuditService } from "../audit/audit.service";
 
 @Injectable()
 export class ConnectorsService {
@@ -14,6 +15,7 @@ export class ConnectorsService {
 
   constructor(
     @Inject(DB) private db: Db,
+    private audit: AuditService,
     manual: ManualImportConnector,
     reddit: RedditConnector,
     youtube: YoutubeConnector,
@@ -31,7 +33,7 @@ export class ConnectorsService {
     return this.db.select().from(connectors).where(eq(connectors.tenantId, tenantId));
   }
 
-  async ensureSeeded(tenantId: number) {
+  async ensureSeeded(tenantId: number, actorUserId: number) {
     const existing = await this.list(tenantId);
     const bySource = new Set(existing.map((c) => c.source));
     const toSeed = Object.values(this.registry).filter((a) => !bySource.has(a.source));
@@ -44,6 +46,7 @@ export class ConnectorsService {
         config: {},
       }).returning();
       await this.db.insert(connectorHealth).values({ connectorId: row.id, health: "unknown" });
+      await this.audit.log(tenantId, actorUserId, "create", "connector", row.id, adapter.source);
     }
     return this.list(tenantId);
   }

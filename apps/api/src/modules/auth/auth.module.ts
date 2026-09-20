@@ -3,6 +3,7 @@ import { JwtModule } from "@nestjs/jwt";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtAuthGuard } from "./jwt-auth.guard";
+import { AuditModule } from "../audit/audit.module";
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { JwtAuthGuard } from "./jwt-auth.guard";
       secret: process.env.JWT_SECRET || "dev-secret-change-in-production",
       signOptions: { expiresIn: "12h" },
     }),
+    AuditModule,
   ],
   providers: [AuthService, JwtAuthGuard],
   controllers: [AuthController],

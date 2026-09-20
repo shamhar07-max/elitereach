@@ -43,17 +43,22 @@ Reproduces the client's own 8-phase plan and records exactly what's built.
   health-check trigger), Campaigns (basic CRUD), Import (paste-based
   manual signal entry).
 
-## Known gaps in Phase 1 itself (not deferred to later phases)
+## Known gaps in Phase 1 — fixed in this pass
 
-- **Role enforcement is coarse.** The JWT guard checks `role !== "owner"`
-  against a route's declared allowed roles, but no route in Phase 1
-  actually declares `@Roles(...)` restrictions yet — every authenticated
-  user can currently do everything an owner can. This needs fixing before
-  a second real user (not just the bootstrap owner) is added.
-- **No admin-log/audit-write path yet.** The `audit_events` table exists
-  in the schema but nothing writes to it — `opportunity_events` captures
-  Reach-specific actions (dismiss/push/feedback), but login, connector
-  changes, and campaign changes aren't recorded anywhere.
+- ~~**Role enforcement is coarse.**~~ **Fixed.** Every mutating route now
+  declares `@Roles(...)`: connector seed/health-check, campaign create/
+  status, signal import, and opportunity dismiss/feedback require admin/
+  analyst/reviewer; pushing to the real CRM (the spec's own "human
+  qualifies" gate) is further restricted to admin/reviewer only. Verified
+  with a real `read_only` user: reads succeed (200), writes correctly
+  return 403 with a clear "role X cannot perform this action" message —
+  a bug in the guard was also fixed along the way, where a role failure
+  was being reported as a misleading 401 "invalid token" instead of 403.
+- ~~**No admin-log/audit-write path yet.**~~ **Fixed.** `AuditService`
+  now writes to `audit_events` on login, bootstrap registration, connector
+  creation, and campaign creation. `opportunity_events` remains the
+  audit trail for opportunity-specific actions (dismiss/push/feedback),
+  which is the more useful record for that entity specifically.
 - **Taxonomy is hardcoded**, not the admin-managed table the client's
   full spec describes (`common/taxonomy.ts` — destinations, trip types,
   phrase lists). This is the deliberate Phase 1 shortcut: a real taxonomy
