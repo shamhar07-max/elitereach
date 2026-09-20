@@ -247,6 +247,71 @@ function JourneysTab() {
   );
 }
 
+const TAXONOMY_CATEGORIES = [
+  { value: "destination_alias", label: "Destination alias", needsCanonical: true, canonicalLabel: "Canonical destination" },
+  { value: "origin_keyword", label: "Origin keyword", needsCanonical: false },
+  { value: "trip_type_keyword", label: "Trip-type keyword", needsCanonical: true, canonicalLabel: "Trip type (e.g. holiday, visa, hotel)" },
+  { value: "ready_to_buy_phrase", label: "Ready-to-buy phrase", needsCanonical: false },
+  { value: "comparison_phrase", label: "Comparison phrase", needsCanonical: false },
+  { value: "discovery_phrase", label: "Discovery phrase", needsCanonical: false },
+];
+
+function TaxonomyTab() {
+  const [terms, setTerms] = useState<any[]>([]);
+  const [form, setForm] = useState({ category: TAXONOMY_CATEGORIES[0].value, term: "", canonicalValue: "" });
+  const load = async () => setTerms(await api("/taxonomy-terms"));
+  useEffect(() => { load(); }, []);
+
+  const selectedCategory = TAXONOMY_CATEGORIES.find((c) => c.value === form.category)!;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api("/taxonomy-terms", { method: "POST", body: JSON.stringify({
+        category: form.category, term: form.term, canonicalValue: form.canonicalValue || undefined,
+      }) });
+      setForm({ ...form, term: "", canonicalValue: "" });
+      load();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const remove = async (id: number) => { await api(`/taxonomy-terms/${id}`, { method: "DELETE" }); load(); };
+
+  return (
+    <div>
+      <h1>Taxonomy</h1>
+      <p className="muted" style={{ marginBottom: 14 }}>
+        The destinations, trip types, and intent phrases the scoring engine recognizes — editable here, no code deploy needed.
+      </p>
+      <form onSubmit={submit} style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+          {TAXONOMY_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+        <input placeholder="Term (e.g. vietnam)" required value={form.term} onChange={(e) => setForm({ ...form, term: e.target.value })} />
+        {selectedCategory.needsCanonical && (
+          <input placeholder={selectedCategory.canonicalLabel} required value={form.canonicalValue} onChange={(e) => setForm({ ...form, canonicalValue: e.target.value })} />
+        )}
+        <button className="btn" type="submit">Add</button>
+      </form>
+      {TAXONOMY_CATEGORIES.map((cat) => {
+        const rows = terms.filter((t) => t.category === cat.value);
+        if (!rows.length) return null;
+        return (
+          <div key={cat.value} style={{ marginBottom: 20 }}>
+            <h3>{cat.label} <span className="muted">({rows.length})</span></h3>
+            {rows.map((t) => (
+              <div className="card" key={t.id} style={{ cursor: "default", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>{t.term}{t.canonicalValue ? ` → ${t.canonicalValue}` : ""}</span>
+                <button className="btn-outline" onClick={() => remove(t.id)}>Remove</button>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ImportTab() {
   const [connectorId, setConnectorId] = useState(1);
   const [text, setText] = useState("");
@@ -327,7 +392,7 @@ export default function Home() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">Elite Reach</div>
-        {["command", "opportunities", "journeys", "connectors", "campaigns", "import"].map((t) => (
+        {["command", "opportunities", "journeys", "connectors", "campaigns", "taxonomy", "import"].map((t) => (
           <button key={t} className={`tab-btn ${tab === t ? "active" : ""}`} style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 4, color: tab === t ? "#fff" : "#C9D2EE" }} onClick={() => setTab(t)}>
             {t === "command" ? "Command Center" : t[0].toUpperCase() + t.slice(1)}
           </button>
@@ -340,6 +405,7 @@ export default function Home() {
         {tab === "journeys" && <JourneysTab />}
         {tab === "connectors" && <ConnectorsTab />}
         {tab === "campaigns" && <CampaignsTab />}
+        {tab === "taxonomy" && <TaxonomyTab />}
         {tab === "import" && <ImportTab />}
       </main>
     </div>

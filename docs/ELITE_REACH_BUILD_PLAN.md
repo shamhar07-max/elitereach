@@ -5,7 +5,7 @@ Reproduces the client's own 8-phase plan and records exactly what's built.
 | Phase | Scope (client's own words) | Status |
 |---|---|---|
 | **1. Production foundation** | PostgreSQL, authentication, permissions, connector framework, campaign management, signal ingestion, normalized storage, deduplication, existing rule scoring | **Done.** See below for specifics. |
-| 2. Intent Intelligence | intent taxonomy, structured extraction, journeys, priority scoring, commercial classification, lead decay, AI evaluation dataset | **Mostly done.** Structured extraction + scoring + commercial classification shipped in Phase 1. Journeys and lead decay are now built too (below). Only the hardcoded taxonomy and the AI evaluation dataset remain — both deferred deliberately (see their own notes below). |
+| 2. Intent Intelligence | intent taxonomy, structured extraction, journeys, priority scoring, commercial classification, lead decay, AI evaluation dataset | **Done except the evaluation dataset.** Structured extraction + scoring + commercial classification shipped in Phase 1; journeys, lead decay, and the admin-managed taxonomy (below) are now built too. Only the AI evaluation dataset remains, deliberately deferred — it needs real labeled data from actual usage, which doesn't exist yet with zero live connectors. |
 | 3. Opportunity Intelligence | content gaps, product opportunities, B2B, partnerships, reputation, competitor signals | Partial — the classifier already distinguishes `direct_lead`/`b2b_opportunity`/`spam`/`irrelevant`/`early_intent`; `content_gap`, `product_opportunity`, `partnership`, `reputation_risk`, and `competitor_signal` are classified as a type in the enum but nothing populates them yet (no aggregation-across-signals logic exists). |
 | 4. Engagement | copilot, human approval, response tracking, community reputation controls | Not started. |
 | 5. Elite Escape OS Integration | CRM sync, lead lifecycle, quotation status, booking status, lost/won status | Partial — one-directional push (opportunity -> CRM lead) works and is verified end-to-end. The reverse sync (CRM status changes flowing back to the opportunity) does not exist. |
@@ -81,10 +81,18 @@ Reproduces the client's own 8-phase plan and records exactly what's built.
   creation, and campaign creation. `opportunity_events` remains the
   audit trail for opportunity-specific actions (dismiss/push/feedback),
   which is the more useful record for that entity specifically.
-- **Taxonomy is hardcoded**, not the admin-managed table the client's
-  full spec describes (`common/taxonomy.ts` — destinations, trip types,
-  phrase lists). This is the deliberate Phase 1 shortcut: a real taxonomy
-  admin UI is meaningful work in its own right and wasn't asked for yet.
+- ~~**Taxonomy is hardcoded**~~ **Fixed.** Destinations, trip types, and
+  intent phrases now live in an admin-managed `taxonomy_terms` table
+  (`modules/taxonomy/`), seeded from the old hardcoded values on a
+  tenant's bootstrap registration — and self-healing for any tenant
+  created before this table existed, seeding lazily on first pipeline
+  read rather than silently running against an empty vocabulary.
+  `common/taxonomy.ts` now holds only structural regex (budget/traveler-
+  count/spam/urgency patterns), which isn't realistic for an ops admin
+  to edit through a UI. Verified live: added "Vietnam" as a destination
+  through the Taxonomy tab with zero code deploy, and a signal mentioning
+  it that scored with `destination: null` before the change correctly
+  showed `destination: "Vietnam"` (and a 6-point higher score) after.
 - **No tests.** Verification so far is curl + Playwright, matching the
   standard used throughout this project, not an automated suite. The
   client's own spec requires unit/integration/E2E/permission tests before

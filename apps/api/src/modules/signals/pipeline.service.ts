@@ -7,6 +7,7 @@ import { IntentExtractionService } from "../intent/intent-extraction.service";
 import { ScoringService } from "../intent/scoring.service";
 import { OpportunityClassifierService } from "../opportunities/opportunity-classifier.service";
 import { JourneysService } from "../journeys/journeys.service";
+import { TaxonomyService } from "../taxonomy/taxonomy.service";
 
 /* The pipeline diagram from the spec:
  *
@@ -28,13 +29,15 @@ export class PipelineService {
     private scoring: ScoringService,
     private classifier: OpportunityClassifierService,
     private journeys: JourneysService,
+    private taxonomyService: TaxonomyService,
   ) {}
 
   async processSignal(signalId: number) {
     const [signal] = await this.db.select().from(signals).where(eq(signals.id, signalId)).limit(1);
     if (!signal) { this.logger.warn(`processSignal: signal ${signalId} not found`); return; }
 
-    const intent = this.intentExtraction.extract(signal.textNormalized);
+    const taxonomy = await this.taxonomyService.getForTenant(signal.tenantId);
+    const intent = this.intentExtraction.extract(signal.textNormalized, taxonomy);
     await this.db.insert(intentExtractions).values({
       signalId: signal.id, origin: intent.origin, destination: intent.destination, tripType: intent.tripType,
       travelerCountHint: intent.travelerCountHint, budgetAedHint: intent.budgetAedHint,

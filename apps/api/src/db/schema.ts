@@ -168,6 +168,29 @@ export const journeySignals = pgTable("journey_signals", {
   byJourney: index("journey_signals_journey_idx").on(t.journeyId),
 }));
 
+// ===== Admin-managed taxonomy (Phase 2) =====
+// Replaces the hardcoded destination/trip-type/phrase lists that shipped
+// in Phase 1 (common/taxonomy.ts) — an ops person can now add "Vietnam"
+// as a destination without a code deploy. Deliberately does NOT cover the
+// numeric-extraction regexes (budget/traveler-count patterns) or spam/
+// urgency patterns — those are structural parsing rules, not business
+// vocabulary, and stay in code.
+export const taxonomyCategoryEnum = pgEnum("taxonomy_category", [
+  "destination_alias", "origin_keyword", "trip_type_keyword",
+  "ready_to_buy_phrase", "comparison_phrase", "discovery_phrase",
+]);
+
+export const taxonomyTerms = pgTable("taxonomy_terms", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  category: taxonomyCategoryEnum("category").notNull(),
+  term: text("term").notNull(), // lowercase alias/keyword/phrase
+  canonicalValue: text("canonical_value"), // destination_alias -> canonical name; trip_type_keyword -> the type key; else unused
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  uniqueTerm: uniqueIndex("taxonomy_terms_unique_idx").on(t.tenantId, t.category, t.term),
+}));
+
 // ===== Deterministic intent extraction (Level 1 — no AI yet) =====
 export const intentExtractions = pgTable("intent_extractions", {
   id: serial("id").primaryKey(),

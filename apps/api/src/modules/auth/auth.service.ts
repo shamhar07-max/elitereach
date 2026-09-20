@@ -1,4 +1,4 @@
-import { Inject, Injectable, ConflictException, UnauthorizedException, ForbiddenException } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, ConflictException, UnauthorizedException, ForbiddenException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { eq, count } from "drizzle-orm";
@@ -6,10 +6,16 @@ import { DB } from "../../db/db.module";
 import type { Db } from "../../db/client";
 import { users, tenants } from "../../db/schema";
 import { AuditService } from "../audit/audit.service";
+import { TaxonomyService } from "../taxonomy/taxonomy.service";
 
 @Injectable()
 export class AuthService {
-  constructor(@Inject(DB) private db: Db, private jwt: JwtService, private audit: AuditService) {}
+  constructor(
+    @Inject(DB) private db: Db,
+    private jwt: JwtService,
+    private audit: AuditService,
+    @Inject(forwardRef(() => TaxonomyService)) private taxonomy: TaxonomyService,
+  ) {}
 
   /** Self-registration only ever creates the first user (and its tenant) —
    * same bootstrap-then-lock pattern used in the Elite Escape OS platform,
@@ -27,6 +33,7 @@ export class AuthService {
       tenantId: tenant.id, email, passwordHash, fullName, role: "owner",
     }).returning();
 
+    await this.taxonomy.seedDefaults(tenant.id);
     await this.audit.log(tenant.id, user.id, "register", "user", user.id, "bootstrap owner");
     return this.issueToken(user);
   }

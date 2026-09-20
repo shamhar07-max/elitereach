@@ -1,10 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import {
-  DESTINATION_ALIASES, ORIGIN_KEYWORDS, TRIP_TYPE_KEYWORDS,
-  READY_TO_BUY_PHRASES, COMPARISON_PHRASES, DISCOVERY_PHRASES,
   HIGH_URGENCY_PATTERNS, MEDIUM_URGENCY_PATTERNS,
   GROUP_SIZE_PATTERN, FAMILY_OF_PATTERN, BUDGET_AED_PATTERN, BUDGET_DOLLAR_PATTERN,
 } from "../../common/taxonomy";
+import { ResolvedTaxonomy } from "../taxonomy/taxonomy.service";
 
 export interface ExtractedIntent {
   origin: string | null;
@@ -19,22 +18,24 @@ export interface ExtractedIntent {
 }
 
 /* Level 1 — deterministic rules only (spec §28). No LLM call anywhere in
- * this file. Confidence is a simple count of how many independent signals
- * (destination + origin + trip type + traveler count + budget) were
- * actually found in the text — not a model's self-reported probability. */
+ * this file. The business vocabulary (destinations, trip types, intent
+ * phrases) is now admin-managed and passed in per-tenant by the caller
+ * (see TaxonomyService) rather than imported as static constants — only
+ * the structural regex patterns (budget/traveler-count/spam/urgency) stay
+ * hardcoded, since those aren't realistic for an ops admin to edit. */
 @Injectable()
 export class IntentExtractionService {
-  extract(textNormalized: string): ExtractedIntent {
+  extract(textNormalized: string, taxonomy: ResolvedTaxonomy): ExtractedIntent {
     const t = textNormalized.toLowerCase();
     let hits = 0;
 
-    const destination = this.findDestination(t);
+    const destination = this.findDestination(t, taxonomy.destinationAliases);
     if (destination) hits++;
 
-    const origin = ORIGIN_KEYWORDS.some((k) => t.includes(k)) ? "UAE" : null;
+    const origin = taxonomy.originKeywords.some((k) => t.includes(k)) ? "UAE" : null;
     if (origin) hits++;
 
-    const tripType = this.findTripType(t);
+    const tripType = this.findTripType(t, taxonomy.tripTypeKeywords);
     if (tripType) hits++;
 
     const travelerCountHint = this.findTravelerCount(t);
@@ -43,7 +44,7 @@ export class IntentExtractionService {
     const budgetAedHint = this.findBudgetAed(t);
     if (budgetAedHint) hits++;
 
-    const purchaseStage = this.classifyStage(t);
+    const purchaseStage = this.classifyStage(t, taxonomy);
     const urgency = this.classifyUrgency(t);
     const segment = travelerCountHint && travelerCountHint > 15 ? "b2b" : "d2c";
 
@@ -52,16 +53,15 @@ export class IntentExtractionService {
     return { origin, destination, tripType, travelerCountHint, budgetAedHint, purchaseStage, urgency, segment, confidence };
   }
 
-  private findDestination(t: string): string | null {
-    for (const [alias, canonical] of Object.entries(DESTINATION_ALIASES)) {
-      if (alias === "dubai" || alias === "uae" || alias === "abu dhabi" || alias === "united arab emirates") continue; // origin, not destination
+  private findDestination(t: string, destinationAliases: Record<string, string>): string | null {
+    for (const [alias, canonical] of Object.entries(destinationAliases)) {
       if (t.includes(alias)) return canonical;
     }
     return null;
   }
 
-  private findTripType(t: string): string | null {
-    for (const [type, keywords] of Object.entries(TRIP_TYPE_KEYWORDS)) {
+  private findTripType(t: string, tripTypeKeywords: Record<string, string[]>): string | null {
+    for (const [type, keywords] of Object.entries(tripTypeKeywords)) {
       if (keywords.some((k) => t.includes(k))) return type;
     }
     return null;
@@ -83,10 +83,10 @@ export class IntentExtractionService {
     return null;
   }
 
-  private classifyStage(t: string): ExtractedIntent["purchaseStage"] {
-    if (READY_TO_BUY_PHRASES.some((p) => t.includes(p))) return "ready_to_buy";
-    if (COMPARISON_PHRASES.some((p) => t.includes(p))) return "comparison";
-    if (DISCOVERY_PHRASES.some((p) => t.includes(p))) return "discovery";
+  private classifyStage(t: string, taxonomy: ResolvedTaxonomy): ExtractedIntent["purchaseStage"] {
+    if (taxonomy.readyToBuyPhrases.some((p) => t.includes(p))) return "ready_to_buy";
+    if (taxonomy.comparisonPhrases.some((p) => t.includes(p))) return "comparison";
+    if (taxonomy.discoveryPhrases.some((p) => t.includes(p))) return "discovery";
     return "research";
   }
 

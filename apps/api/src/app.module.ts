@@ -9,6 +9,7 @@ import { OpportunitiesModule } from "./modules/opportunities/opportunities.modul
 import { CrmSyncModule } from "./modules/crm-sync/crm-sync.module";
 import { JourneysModule } from "./modules/journeys/journeys.module";
 import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
+import { TaxonomyModule } from "./modules/taxonomy/taxonomy.module";
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
     CrmSyncModule,
     JourneysModule,
     MaintenanceModule,
+    TaxonomyModule,
   ],
 })
 export class AppModule {}

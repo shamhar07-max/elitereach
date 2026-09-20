@@ -1,9 +1,10 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { AuditModule } from "../audit/audit.module";
+import { TaxonomyModule } from "../taxonomy/taxonomy.module";
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { AuditModule } from "../audit/audit.module";
       signOptions: { expiresIn: "12h" },
     }),
     AuditModule,
+    forwardRef(() => TaxonomyModule),
   ],
   providers: [AuthService, JwtAuthGuard],
   controllers: [AuthController],
