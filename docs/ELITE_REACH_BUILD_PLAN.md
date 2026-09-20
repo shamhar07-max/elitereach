@@ -5,13 +5,35 @@ Reproduces the client's own 8-phase plan and records exactly what's built.
 | Phase | Scope (client's own words) | Status |
 |---|---|---|
 | **1. Production foundation** | PostgreSQL, authentication, permissions, connector framework, campaign management, signal ingestion, normalized storage, deduplication, existing rule scoring | **Done.** See below for specifics. |
-| 2. Intent Intelligence | intent taxonomy, structured extraction, journeys, priority scoring, commercial classification, lead decay, AI evaluation dataset | Not started. Phase 1 already has basic structured extraction + scoring + commercial classification (needed for opportunities to be usable at all) — journeys (linking multiple signals from the same person over time) and true lead decay (a scheduled job that recalculates priority as `expiresAt` approaches) are the parts still missing. |
+| 2. Intent Intelligence | intent taxonomy, structured extraction, journeys, priority scoring, commercial classification, lead decay, AI evaluation dataset | **Mostly done.** Structured extraction + scoring + commercial classification shipped in Phase 1. Journeys and lead decay are now built too (below). Only the hardcoded taxonomy and the AI evaluation dataset remain — both deferred deliberately (see their own notes below). |
 | 3. Opportunity Intelligence | content gaps, product opportunities, B2B, partnerships, reputation, competitor signals | Partial — the classifier already distinguishes `direct_lead`/`b2b_opportunity`/`spam`/`irrelevant`/`early_intent`; `content_gap`, `product_opportunity`, `partnership`, `reputation_risk`, and `competitor_signal` are classified as a type in the enum but nothing populates them yet (no aggregation-across-signals logic exists). |
 | 4. Engagement | copilot, human approval, response tracking, community reputation controls | Not started. |
 | 5. Elite Escape OS Integration | CRM sync, lead lifecycle, quotation status, booking status, lost/won status | Partial — one-directional push (opportunity -> CRM lead) works and is verified end-to-end. The reverse sync (CRM status changes flowing back to the opportunity) does not exist. |
 | 6. Revenue Intelligence | revenue attribution, profit attribution, channel/campaign/destination ROI | Not started. |
 | 7. Strategy Layer | market trends, trigger events, product recommendations, owner WhatsApp briefs | Not started. |
 | 8. Advanced Learning | conversion feedback, adaptive scoring, response-performance learning, forecasting | Not started — the `opportunity_events` table can record feedback labels (`recordFeedback()` exists) but nothing yet reads that data back into the scoring weights. |
+
+## Journeys and lead decay (Phase 2 items, built)
+
+- **Identity & journey resolution** (`source_identities`, `journeys`,
+  `journey_signals`): every signal with an author id gets grouped with
+  prior signals from the same author on the same platform into one
+  journey, tracking the intent progression over time. Deliberately not
+  cross-platform identity matching — the client's spec explicitly warns
+  against invasive cross-source identity linking. A 30-day gap between
+  signals starts a fresh journey rather than reviving a cold one.
+  Verified against the client's own example scenario almost verbatim
+  ("Japan weather?" → "hotel budget for Tokyo?" → "Japan package, ready
+  to book, family of 2") — the journey correctly shows the purchase
+  stage progressing research → research → ready_to_buy across all three
+  signals, exposed in both the API (`GET /api/journeys`) and a new
+  Journeys tab in the dashboard.
+- **Lead decay** (spec §12): a real BullMQ repeatable job
+  (`MaintenanceService` + `DecayProcessor`) runs every 60 seconds and
+  flips any `open` opportunity whose `expiresAt` has passed to `expired`
+  — verified by backdating a real opportunity's `expiresAt` and watching
+  the scheduled job pick it up and flip its status without any manual
+  trigger.
 
 ## What Phase 1 actually contains, concretely
 

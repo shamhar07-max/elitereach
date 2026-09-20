@@ -2,7 +2,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq } from "drizzle-orm";
 import { DB } from "../../db/db.module";
 import type { Db } from "../../db/client";
-import { opportunities, signals, intentExtractions, intentScores, opportunityEvents } from "../../db/schema";
+import { opportunities, signals, intentExtractions, intentScores, opportunityEvents, journeySignals, journeys } from "../../db/schema";
 
 @Injectable()
 export class OpportunitiesService {
@@ -34,7 +34,13 @@ export class OpportunitiesService {
     const [score] = await this.db.select().from(intentScores).where(eq(intentScores.signalId, opp.signalId)).limit(1);
     const events = await this.db.select().from(opportunityEvents).where(eq(opportunityEvents.opportunityId, opp.id)).orderBy(desc(opportunityEvents.createdAt));
 
-    return { ...opp, signal, intent, score, events };
+    const [journeyLink] = await this.db.select({
+      journeyId: journeySignals.journeyId, sequenceNumber: journeySignals.sequenceNumber, signalCount: journeys.signalCount,
+    }).from(journeySignals)
+      .innerJoin(journeys, eq(journeys.id, journeySignals.journeyId))
+      .where(eq(journeySignals.signalId, opp.signalId)).limit(1);
+
+    return { ...opp, signal, intent, score, events, journey: journeyLink || null };
   }
 
   async dismiss(tenantId: number, id: number, actorUserId: number) {

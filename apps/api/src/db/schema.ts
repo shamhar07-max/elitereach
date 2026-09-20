@@ -126,6 +126,48 @@ export const signals = pgTable("signals", {
   byStatus: index("signals_status_idx").on(t.processingStatus),
 }));
 
+// ===== Identity & journey resolution (Phase 2) =====
+// Deliberately NOT cross-platform identity matching (the client's spec is
+// explicit: no invasive identity linking across sources). This only groups
+// repeat signals from the SAME author on the SAME platform — e.g. one
+// Reddit user posting three times over a week — into one journey, per the
+// spec's own "Day 1 / Day 3 / Day 5" example.
+export const sourceIdentities = pgTable("source_identities", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  source: text("source").notNull(),
+  authorExternalId: text("author_external_id").notNull(),
+  authorDisplayName: text("author_display_name"),
+  firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+}, (t) => ({
+  identityIdx: uniqueIndex("source_identities_idx").on(t.tenantId, t.source, t.authorExternalId),
+}));
+
+export const journeyStatusEnum = pgEnum("journey_status", ["active", "converted", "abandoned"]);
+
+export const journeys = pgTable("journeys", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  sourceIdentityId: integer("source_identity_id").notNull().references(() => sourceIdentities.id, { onDelete: "cascade" }),
+  status: journeyStatusEnum("status").notNull().default("active"),
+  latestPurchaseStage: text("latest_purchase_stage"),
+  latestUrgency: text("latest_urgency"),
+  signalCount: integer("signal_count").notNull().default(0),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  lastSignalAt: timestamp("last_signal_at").notNull().defaultNow(),
+}, (t) => ({ byIdentity: index("journeys_identity_idx").on(t.sourceIdentityId) }));
+
+export const journeySignals = pgTable("journey_signals", {
+  id: serial("id").primaryKey(),
+  journeyId: integer("journey_id").notNull().references(() => journeys.id, { onDelete: "cascade" }),
+  signalId: integer("signal_id").notNull().references(() => signals.id, { onDelete: "cascade" }),
+  sequenceNumber: integer("sequence_number").notNull(), // 1st, 2nd, 3rd signal in this journey
+}, (t) => ({
+  bySignal: uniqueIndex("journey_signals_signal_idx").on(t.signalId),
+  byJourney: index("journey_signals_journey_idx").on(t.journeyId),
+}));
+
 // ===== Deterministic intent extraction (Level 1 — no AI yet) =====
 export const intentExtractions = pgTable("intent_extractions", {
   id: serial("id").primaryKey(),

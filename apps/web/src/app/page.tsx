@@ -7,7 +7,7 @@ type User = { id: number; email: string; fullName: string; role: string; tenantI
 const pillClass = (level: string) => {
   if (["healthy", "production", "approved", "direct_lead"].includes(level)) return "pill pill-green";
   if (["degraded", "beta", "requires_review", "early_intent"].includes(level)) return "pill pill-yellow";
-  if (["down", "disabled", "spam", "irrelevant"].includes(level)) return "pill pill-red";
+  if (["down", "disabled", "spam", "irrelevant", "expired"].includes(level)) return "pill pill-red";
   if (["b2b_opportunity"].includes(level)) return "pill pill-blue";
   return "pill pill-grey";
 };
@@ -133,6 +133,9 @@ function OpportunityDetail({ id, onClose, onChanged }: { id: number; onClose: ()
         {detail.crmLeadId && <span className="pill pill-green">CRM lead #{detail.crmLeadId}</span>}</p>
       <p className="muted">{detail.signal?.textOriginal}</p>
       {detail.signal?.sourceUrl && <p><a href={detail.signal.sourceUrl} target="_blank" rel="noreferrer">{detail.signal.sourceUrl}</a></p>}
+      {detail.journey && (
+        <p className="muted">Part of a journey — signal {detail.journey.sequenceNumber} of {detail.journey.signalCount} from this person (journey #{detail.journey.journeyId})</p>
+      )}
 
       {detail.intent && (
         <div className="score-grid">
@@ -185,6 +188,60 @@ function OpportunitiesTab() {
       </div>
       <div>
         {selected ? <OpportunityDetail id={selected} onClose={() => setSelected(null)} onChanged={() => { load(); }} /> : <p className="muted">Select an opportunity.</p>}
+      </div>
+    </div>
+  );
+}
+
+function JourneyDetail({ id, onClose }: { id: number; onClose: () => void }) {
+  const [detail, setDetail] = useState<any>(null);
+  useEffect(() => { api(`/journeys/${id}`).then(setDetail); }, [id]);
+  if (!detail) return <div className="card">Loading…</div>;
+
+  return (
+    <div className="card" style={{ cursor: "default" }}>
+      <div className="top">
+        <span className="title">Journey #{detail.id} — {detail.identity?.authorDisplayName || detail.identity?.authorExternalId}</span>
+        <button className="btn-outline" onClick={onClose}>Close</button>
+      </div>
+      <p><span className={pillClass(detail.status)}>{detail.status}</span> · {detail.identity?.source} · {detail.signalCount} signal(s)</p>
+      <div className="reasons">
+        <b>Intent progression</b>
+        <ul>
+          {detail.timeline.map((t: any) => (
+            <li key={t.signalId}>
+              <b>#{t.sequenceNumber}</b> [{t.purchaseStage || "—"}{t.destination ? ` · ${t.destination}` : ""}] {t.text?.slice(0, 100)}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function JourneysTab() {
+  const [journeys, setJourneys] = useState<any[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+  useEffect(() => { api("/journeys").then(setJourneys); }, []);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 20 }}>
+      <div>
+        <h1>Journeys</h1>
+        <p className="muted" style={{ marginBottom: 12 }}>Repeat signals from the same author on the same platform, linked into one intent progression.</p>
+        {journeys.map((j) => (
+          <div className="card" key={j.id} onClick={() => setSelected(j.id)}>
+            <div className="top">
+              <span className="title">{j.authorDisplayName || j.authorExternalId}</span>
+              <span className={pillClass(j.status)}>{j.status}</span>
+            </div>
+            <div className="muted">{j.source} · {j.signalCount} signal(s) · latest: {j.latestPurchaseStage || "—"}</div>
+          </div>
+        ))}
+        {!journeys.length && <p className="muted">No journeys yet — signals need an author id to be linked.</p>}
+      </div>
+      <div>
+        {selected ? <JourneyDetail id={selected} onClose={() => setSelected(null)} /> : <p className="muted">Select a journey.</p>}
       </div>
     </div>
   );
@@ -270,7 +327,7 @@ export default function Home() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">Elite Reach</div>
-        {["command", "opportunities", "connectors", "campaigns", "import"].map((t) => (
+        {["command", "opportunities", "journeys", "connectors", "campaigns", "import"].map((t) => (
           <button key={t} className={`tab-btn ${tab === t ? "active" : ""}`} style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 4, color: tab === t ? "#fff" : "#C9D2EE" }} onClick={() => setTab(t)}>
             {t === "command" ? "Command Center" : t[0].toUpperCase() + t.slice(1)}
           </button>
@@ -280,6 +337,7 @@ export default function Home() {
       <main className="content">
         {tab === "command" && <CommandCenter />}
         {tab === "opportunities" && <OpportunitiesTab />}
+        {tab === "journeys" && <JourneysTab />}
         {tab === "connectors" && <ConnectorsTab />}
         {tab === "campaigns" && <CampaignsTab />}
         {tab === "import" && <ImportTab />}

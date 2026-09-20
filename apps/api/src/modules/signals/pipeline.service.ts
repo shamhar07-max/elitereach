@@ -6,13 +6,17 @@ import { signals, intentExtractions, intentScores, opportunities } from "../../d
 import { IntentExtractionService } from "../intent/intent-extraction.service";
 import { ScoringService } from "../intent/scoring.service";
 import { OpportunityClassifierService } from "../opportunities/opportunity-classifier.service";
+import { JourneysService } from "../journeys/journeys.service";
 
-/* The actual pipeline diagram from the spec, minus the AI-only stages
- * (identity/journey resolution is Phase 2; this is Phase 1's deterministic
- * "existing rule scoring" path):
+/* The pipeline diagram from the spec:
  *
  *   signal (pending) -> normalize (done at ingest) -> intent extraction
- *   -> scoring -> opportunity classification -> signal (classified)
+ *   -> scoring -> opportunity classification -> identity/journey
+ *   resolution -> signal (classified)
+ *
+ * Identity/journey resolution (Phase 2) now runs here too — it's cheap,
+ * deterministic DB work with no AI dependency, so there was no reason to
+ * hold it for a separate pass once the tables existed.
  */
 @Injectable()
 export class PipelineService {
@@ -23,6 +27,7 @@ export class PipelineService {
     private intentExtraction: IntentExtractionService,
     private scoring: ScoringService,
     private classifier: OpportunityClassifierService,
+    private journeys: JourneysService,
   ) {}
 
   async processSignal(signalId: number) {
@@ -53,8 +58,12 @@ export class PipelineService {
       commercialClass: classification.commercialClass, expiresAt, status: "open",
     }).onConflictDoNothing();
 
+    const journeyId = await this.journeys.attachSignal(
+      signal.tenantId, signal.source, signal.authorExternalId, signal.authorDisplayName, signal.id, intent,
+    );
+
     await this.db.update(signals).set({ processingStatus: "classified" }).where(eq(signals.id, signal.id));
 
-    return { signalId: signal.id, intent, score, classification };
+    return { signalId: signal.id, intent, score, classification, journeyId };
   }
 }

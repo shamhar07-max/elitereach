@@ -7,6 +7,8 @@ import { CampaignsModule } from "./modules/campaigns/campaigns.module";
 import { SignalsModule } from "./modules/signals/signals.module";
 import { OpportunitiesModule } from "./modules/opportunities/opportunities.module";
 import { CrmSyncModule } from "./modules/crm-sync/crm-sync.module";
+import { JourneysModule } from "./modules/journeys/journeys.module";
+import { MaintenanceModule } from "./modules/maintenance/maintenance.module";
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { CrmSyncModule } from "./modules/crm-sync/crm-sync.module";
     SignalsModule,
     OpportunitiesModule,
     CrmSyncModule,
+    JourneysModule,
+    MaintenanceModule,
   ],
 })
 export class AppModule {}
